@@ -237,24 +237,26 @@ class _ManualComplaintCreationScreenState
               ),
             ),
             const SizedBox(height: 8),
-            ...ApplianceType.values.map((type) {
-              final isChecked = _selectedAppliances.contains(type);
-              return CheckboxListTile(
-                title: Text(type.displayName),
-                value: isChecked,
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (bool? checked) {
-                  setState(() {
-                    if (checked == true) {
-                      _selectedAppliances.add(type);
-                    } else {
-                      _selectedAppliances.remove(type);
-                    }
-                  });
-                },
-              );
-            }),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: ApplianceType.values.map((type) {
+                final selected = _selectedAppliances.contains(type);
+                return FilterChip(
+                  label: Text(type.displayName),
+                  selected: selected,
+                  onSelected: (bool value) {
+                    setState(() {
+                      if (value) {
+                        _selectedAppliances.add(type);
+                      } else {
+                        _selectedAppliances.remove(type);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
             // Validation error for checkboxes
             FormField<Set<ApplianceType>>(
               initialValue: _selectedAppliances,

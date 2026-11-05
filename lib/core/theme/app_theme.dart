@@ -152,4 +152,15 @@ class AppTheme {
   static const Color acColor = Color(0xFF1565C0);
   static const Color fridgeColor = Color(0xFF2E7D32);
   static const Color washingMachineColor = Color(0xFFF9A825);
+  static const Color roColor = Color(0xFF00838F);
+  static const Color geyserColor = Color(0xFFE64A19);
+
+  static Color applianceColor(String displayName) => switch (displayName) {
+        'AC' => acColor,
+        'Fridge' => fridgeColor,
+        'Washing Machine' => washingMachineColor,
+        'RO' => roColor,
+        'Geyser' => geyserColor,
+        _ => Colors.grey,
+      };
 }

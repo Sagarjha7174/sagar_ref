@@ -34,7 +34,7 @@ class AppConstants {
   ];
 
   // Appliance types
-  static const List<String> applianceTypes = ['AC', 'Fridge', 'Washing Machine'];
+  static const List<String> applianceTypes = ['AC', 'Fridge', 'Washing Machine', 'RO', 'Geyser'];
 
   // CSV Export
   static const String exportSubDir = 'exports';

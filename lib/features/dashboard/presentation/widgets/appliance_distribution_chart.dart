@@ -14,6 +14,8 @@ class ApplianceDistributionChart extends StatelessWidget {
     'AC': AppTheme.acColor,
     'Fridge': AppTheme.fridgeColor,
     'Washing Machine': AppTheme.washingMachineColor,
+    'RO': AppTheme.roColor,
+    'Geyser': AppTheme.geyserColor,
   };
 
   @override

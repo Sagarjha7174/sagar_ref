@@ -96,11 +96,15 @@ class SettingsScreen extends ConsumerWidget {
           ]),
 
           const _SectionHeader('About'),
-          const _SettingsGroup(children: [
-            _SettingsTile(
-              icon: Icons.info_outline,
-              title: Strings.appName,
-              subtitle: Strings.appInfo,
+          _SettingsGroup(children: [
+            ListTile(
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset('assets/images/logo.png', width: 44, height: 44),
+              ),
+              title: const Text(Strings.appName),
+              subtitle: const Text(Strings.appInfo),
+              shape: const RoundedRectangleBorder(),
             ),
           ]),
         ],

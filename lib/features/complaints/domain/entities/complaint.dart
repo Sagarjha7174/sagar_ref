@@ -3,7 +3,9 @@ import 'package:equatable/equatable.dart';
 enum ApplianceType {
   ac('AC'),
   fridge('Fridge'),
-  washingMachine('Washing Machine');
+  washingMachine('Washing Machine'),
+  ro('RO'),
+  geyser('Geyser');
 
   const ApplianceType(this.displayName);
   final String displayName;
@@ -13,6 +15,8 @@ enum ApplianceType {
       'ac' => ApplianceType.ac,
       'fridge' => ApplianceType.fridge,
       'washing machine' || 'washingmachine' => ApplianceType.washingMachine,
+      'ro' || 'ro purifier' || 'water purifier' => ApplianceType.ro,
+      'geyser' || 'gyser' || 'geysar' => ApplianceType.geyser,
       _ => ApplianceType.ac,
     };
   }

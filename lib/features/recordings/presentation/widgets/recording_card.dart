@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/extensions/date_extensions.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/string_constants.dart';
 import '../../../../core/utils/phone_number_utils.dart';
 import '../../domain/entities/recording_item.dart';
@@ -33,7 +33,16 @@ class RecordingCard extends StatelessWidget {
     return (first + second).toUpperCase();
   }
 
-  String _formatDuration(int seconds) {
+  /// "05 Nov, 06:39 PM" (year shown only if not the current year).
+  String get _when {
+    final t = recording.recordedAt;
+    final pattern =
+        t.year == DateTime.now().year ? 'dd MMM, hh:mm a' : 'dd MMM yy, hh:mm a';
+    return DateFormat(pattern).format(t);
+  }
+
+  String get _duration {
+    final seconds = recording.durationSeconds;
     if (seconds <= 0) return '';
     final m = seconds ~/ 60;
     final s = seconds % 60;
@@ -45,30 +54,37 @@ class RecordingCard extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final phone = PhoneNumberUtils.formatForDisplay(recording.phoneNumber);
-    final duration = _formatDuration(recording.durationSeconds);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: cs.onSurfaceVariant,
+      fontWeight: FontWeight.w500,
+    );
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onPlay,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Name + phone + delete
               Row(
                 children: [
                   CircleAvatar(
-                    radius: 22,
+                    radius: 19,
                     backgroundColor: cs.primaryContainer,
                     foregroundColor: cs.onPrimaryContainer,
                     child: Text(
                       _initials,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,12 +93,15 @@ class RecordingCard extends StatelessWidget {
                           _hasName ? recording.contactName : phone,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         if (_hasName)
                           Text(
                             phone,
-                            style: theme.textTheme.bodyMedium?.copyWith(
+                            maxLines: 1,
+                            style: theme.textTheme.bodySmall?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),
                           ),
@@ -92,25 +111,39 @@ class RecordingCard extends StatelessWidget {
                   IconButton(
                     tooltip: Strings.discard,
                     onPressed: onDiscard,
-                    icon: Icon(Icons.delete_outline, color: cs.error),
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.delete_outline, color: cs.error, size: 22),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
+              const SizedBox(height: 8),
+
+              // Single info line: ↙ date, time · duration
+              Row(
                 children: [
-                  _InfoChip(
-                    icon: Icons.schedule,
-                    label: recording.recordedAt.toDisplayDateTime(),
+                  Icon(Icons.call_received, size: 15, color: Colors.green.shade600),
+                  const SizedBox(width: 6),
+                  Icon(Icons.schedule, size: 14, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      _when,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted,
+                    ),
                   ),
-                  if (duration.isNotEmpty)
-                    _InfoChip(icon: Icons.timer_outlined, label: duration),
-                  const _InfoChip(icon: Icons.call_received, label: 'Incoming'),
+                  if (_duration.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    Icon(Icons.timer_outlined, size: 14, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(_duration, maxLines: 1, style: muted),
+                  ],
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+
+              // Actions
               Row(
                 children: [
                   _RoundAction(
@@ -133,11 +166,13 @@ class RecordingCard extends StatelessWidget {
                     padding: const EdgeInsets.only(right: 8),
                     child: FilledButton.icon(
                       onPressed: onCreateComplaint,
-                      icon: const Icon(Icons.add, size: 20),
-                      label: const Text('Create Complaint'),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Complaint'),
                       style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 42),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
                       ),
                     ),
                   ),
@@ -146,39 +181,6 @@ class RecordingCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: cs.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
-                ),
-          ),
-        ],
       ),
     );
   }
@@ -210,8 +212,8 @@ class _RoundAction extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Icon(icon, color: foreground, size: 22),
+            padding: const EdgeInsets.all(8),
+            child: Icon(icon, color: foreground, size: 20),
           ),
         ),
       ),

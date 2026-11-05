@@ -31,7 +31,17 @@ class DashboardScreen extends ConsumerWidget {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text(Strings.dashboard),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset('assets/images/logo.png', width: 32, height: 32),
+              ),
+              const SizedBox(width: 10),
+              const Text(Strings.dashboard),
+            ],
+          ),
           actions: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),

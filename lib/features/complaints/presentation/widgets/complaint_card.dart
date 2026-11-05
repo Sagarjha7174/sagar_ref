@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/string_constants.dart';
 import '../../../../core/extensions/date_extensions.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/entities/complaint.dart';
 
 class ComplaintCard extends StatelessWidget {
@@ -106,11 +107,7 @@ class _ApplianceChip extends StatelessWidget {
 
   final ApplianceType type;
 
-  Color get _color => switch (type) {
-        ApplianceType.ac => const Color(0xFF1565C0),
-        ApplianceType.fridge => const Color(0xFF2E7D32),
-        ApplianceType.washingMachine => const Color(0xFFF9A825),
-      };
+  Color get _color => AppTheme.applianceColor(type.displayName);
 
   @override
   Widget build(BuildContext context) {
