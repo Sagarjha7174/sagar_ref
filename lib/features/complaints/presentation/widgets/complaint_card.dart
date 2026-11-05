@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/string_constants.dart';
 import '../../../../core/extensions/date_extensions.dart';
-import '../../../../core/widgets/status_badge.dart';
 import '../../domain/entities/complaint.dart';
 
 class ComplaintCard extends StatelessWidget {
@@ -66,7 +65,7 @@ class ComplaintCard extends StatelessWidget {
               Text(
                 complaint.createdAt.toDisplayDateTime(),
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
               ),
               const SizedBox(height: 12),
@@ -118,9 +117,9 @@ class _ApplianceChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.1),
+        color: _color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _color.withOpacity(0.3)),
+        border: Border.all(color: _color.withValues(alpha: 0.3)),
       ),
       child: Text(
         type.displayName,

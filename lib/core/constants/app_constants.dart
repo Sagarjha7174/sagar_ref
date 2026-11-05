@@ -14,12 +14,18 @@ class AppConstants {
   static const String keyDbVersion = 'db_version';
   static const String keyAutoBackupFolderPath = 'auto_backup_folder_path';
   static const String keyLastAutoBackupTimestamp = 'last_auto_backup_timestamp';
+  static const String keyLastCloudUploadTimestamp = 'last_cloud_upload_timestamp';
+  static const String keyLastCloudUploadError = 'last_cloud_upload_error';
+
+  // Backup
+  static const String backupFileName = 'sagar_refrig_auto_backup.db';
+  static const Duration autoBackupInterval = Duration(hours: 24);
 
   // Call log matching window (seconds)
   static const int callLogMatchWindowSeconds = 120;
 
-  // Recording file extension
-  static const String recordingExtension = '.mp3';
+  // Recording file extensions (lowercase)
+  static const List<String> recordingExtensions = ['.mp3', '.m4a'];
 
   // MIUI default recording paths
   static const List<String> miuiRecordingPaths = [

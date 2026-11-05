@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -10,9 +12,17 @@ import '../../../../core/errors/result.dart';
 import '../../../../core/extensions/date_extensions.dart';
 import '../../../../core/utils/csv_utils.dart';
 import '../../../complaints/data/models/complaint_model.dart';
-import '../../../complaints/domain/entities/complaint.dart';
 import '../../domain/repositories/settings_repository.dart';
 import '../datasources/google_drive_service.dart';
+
+/// Result of one backup run.
+class _BackupOutcome {
+  String? localPath;
+  String? localError;
+  bool signedIn = false;
+  bool uploaded = false;
+  String? cloudError;
+}
 
 class SettingsRepositoryImpl implements SettingsRepository {
   SettingsRepositoryImpl({
@@ -29,6 +39,23 @@ class SettingsRepositoryImpl implements SettingsRepository {
   final ComplaintsDao _complaintsDao;
   final AppDatabase _database;
   final GoogleDriveService _googleDriveService;
+
+  /// Serializes backup/restore work across all repository instances in this
+  /// isolate (main.dart, Riverpod and Settings each create one), so two
+  /// backups never write the same files at once.
+  static Future<void> _queue = Future.value();
+
+  static Future<T> _serialized<T>(Future<T> Function() task) {
+    final completer = Completer<T>();
+    _queue = _queue.then((_) async {
+      try {
+        completer.complete(await task());
+      } catch (e, s) {
+        completer.completeError(e, s);
+      }
+    });
+    return completer.future;
+  }
 
   @override
   Future<String?> getRecordingFolderPath() {
@@ -88,168 +115,331 @@ class SettingsRepositoryImpl implements SettingsRepository {
     }
   }
 
-  Future<String?> _getDatabasePath() async {
-    final names = [
-      AppConstants.databaseName,
+  // ===== DATABASE FILE HELPERS =====
+
+  /// Path of the database file the app actually has open, as reported by
+  /// SQLite itself. Falls back to drift_flutter's default location.
+  Future<String> _liveDatabasePath() async {
+    try {
+      final rows = await _database.customSelect('PRAGMA database_list').get();
+      for (final row in rows) {
+        if (row.data['name'] == 'main') {
+          final file = row.data['file'] as String?;
+          if (file != null && file.isNotEmpty) return file;
+        }
+      }
+    } catch (_) {
+      // Database closed or unavailable: use the default location.
+    }
+    // drift_flutter default: <documents>/<name>.sqlite
+    return p.join(
+      (await getApplicationDocumentsDirectory()).path,
       '${AppConstants.databaseName}.sqlite',
-    ];
-
-    final paths = <String>[];
-    for (final name in names) {
-      paths.addAll([
-        p.join((await getApplicationSupportDirectory()).path, name),
-        p.join((await getApplicationDocumentsDirectory()).path, '..', 'databases', name),
-        p.join((await getApplicationDocumentsDirectory()).path, name),
-      ]);
-    }
-
-    for (final path in paths) {
-      if (await File(path).exists()) {
-        return path;
-      }
-    }
-
-    // Try a recursive scan of app private directories to locate the database file
-    try {
-      final searchDirs = [
-        await getApplicationSupportDirectory(),
-        await getApplicationDocumentsDirectory(),
-        Directory(p.join((await getApplicationDocumentsDirectory()).path, '..')),
-      ];
-      for (final dir in searchDirs) {
-        if (await dir.exists()) {
-          await for (final entity in dir.list(recursive: true, followLinks: false)) {
-            if (entity is File) {
-              final fileName = p.basename(entity.path);
-              if (names.contains(fileName)) {
-                return entity.path;
-              }
-            }
-          }
-        }
-      }
-    } catch (_) {}
-
-    // Fallback default: first path
-    if (paths.isNotEmpty) {
-      return paths.first;
-    }
-    return null;
+    );
   }
 
-  @override
-  Future<Result<String>> backupDatabase(String destinationDir) async {
+  static Future<bool> _isSqliteFile(File file) async {
     try {
-      final dbPath = await _getDatabasePath();
-      if (dbPath == null) {
-        return Result.failure(const BackupFailure('Database path not resolved'));
-      }
-      
-      final dbFile = File(dbPath);
-      if (!await dbFile.exists()) {
-        return Result.failure(const BackupFailure('Database file not found'));
-      }
-
-      // User requested: overwrite auto backup file directly
-      final backupPath = p.join(
-        destinationDir,
-        'sagar_refrig_auto_backup.db',
-      );
-
-      // Copy main database file
-      await dbFile.copy(backupPath);
-      
-      // Also copy WAL and SHM files if they exist to keep the backup fully integral
-      final walFile = File('$dbPath-wal');
-      final shmFile = File('$dbPath-shm');
-      if (await walFile.exists()) {
-        await walFile.copy('$backupPath-wal');
-      }
-      if (await shmFile.exists()) {
-        await shmFile.copy('$backupPath-shm');
-      }
-
-      // Upload to Google Drive automatically!
-      bool cloudSuccess = false;
-      bool signedIn = false;
+      if (!await file.exists() || await file.length() < 100) return false;
+      final raf = await file.open();
       try {
-        if (await _googleDriveService.isSignedIn) {
-          signedIn = true;
-          print('Starting automatic upload to Google Drive...');
-          await _googleDriveService.uploadBackup(backupPath);
-          cloudSuccess = true;
-          print('Google Drive upload successful.');
-        } else {
-          print('Google Drive not signed in. Skipping cloud backup.');
-        }
-      } catch (uploadError) {
-        print('Google Drive upload failed: $uploadError');
-        // We don't fail the local backup if cloud backup fails, just log it.
+        final header = await raf.read(16);
+        return String.fromCharCodes(header) == 'SQLite format 3\u0000';
+      } finally {
+        await raf.close();
       }
-
-      String successMessage = backupPath;
-      if (signedIn && cloudSuccess) {
-        successMessage += '\n\n✅ Uploaded to Google Drive';
-      } else if (signedIn && !cloudSuccess) {
-        successMessage += '\n\n❌ Google Drive upload failed. Check internet.';
-      }
-
-      return Result.success(successMessage);
-    } catch (e) {
-      return Result.failure(BackupFailure('Backup failed: $e'));
+    } catch (_) {
+      return false;
     }
   }
 
-  @override
-  Future<Result<void>> restoreDatabase(String sourceFilePath) async {
+  static Future<void> _deleteIfExists(String path) async {
+    final f = File(path);
+    if (await f.exists()) await f.delete();
+  }
+
+  /// Writes a consistent, self-contained copy of the open database to
+  /// [targetPath] using `VACUUM INTO`. Safe while the app is reading/writing,
+  /// and includes changes still in the WAL. Produces no -wal/-shm files.
+  Future<void> _snapshotTo(String targetPath) async {
+    await Directory(p.dirname(targetPath)).create(recursive: true);
+    await _deleteIfExists(targetPath); // VACUUM INTO refuses existing files
+    await _database.customStatement('VACUUM INTO ?', [targetPath]);
+    if (!await _isSqliteFile(File(targetPath))) {
+      throw const BackupFailure('Backup snapshot is not a valid database');
+    }
+  }
+
+  /// Snapshot in the app's temp dir, named like the backup so the Drive file
+  /// keeps the same name.
+  Future<File> _createSnapshot() async {
+    final tmp = await getTemporaryDirectory();
+    final path = p.join(tmp.path, 'backup', AppConstants.backupFileName);
+    await _snapshotTo(path);
+    return File(path);
+  }
+
+  /// Copies [snapshot] into [folder] atomically (temp file + rename), so an
+  /// interrupted copy never leaves a half-written backup.
+  Future<String> _writeLocalCopy(File snapshot, String folder) async {
+    final dir = Directory(folder);
+    if (!await dir.exists()) await dir.create(recursive: true);
+
+    final dest = p.join(folder, AppConstants.backupFileName);
+    final tmp = '$dest.tmp';
+    await snapshot.copy(tmp);
+    await File(tmp).rename(dest);
+
+    // Older versions copied -wal/-shm next to the backup. A stale one could
+    // be applied on restore, so remove them.
+    for (final suffix in const ['-wal', '-shm', '-journal']) {
+      await _deleteIfExists('$dest$suffix');
+    }
+    return dest;
+  }
+
+  Future<DateTime?> _readTime(String key) async {
+    final ms = int.tryParse(await _settingsDao.getValue(key) ?? '');
+    return ms == null || ms == 0 ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  Future<void> _writeTime(String key, DateTime time) =>
+      _settingsDao.setValue(key, time.millisecondsSinceEpoch.toString());
+
+  // ===== BACKUP =====
+
+  Future<_BackupOutcome> _runBackup({
+    required String? folder,
+    required bool interactive,
+  }) async {
+    final outcome = _BackupOutcome();
+    final hasFolder = folder != null && folder.isNotEmpty;
+    outcome.signedIn = await _googleDriveService.isSignedIn;
+
+    if (!hasFolder && !outcome.signedIn) {
+      throw const BackupFailure(
+        'Choose a backup folder or sign in to Google Drive first.',
+      );
+    }
+
+    final snapshot = await _createSnapshot();
     try {
-      final sourceFile = File(sourceFilePath);
-      if (!await sourceFile.exists()) {
+      if (hasFolder) {
+        try {
+          outcome.localPath = await _writeLocalCopy(snapshot, folder);
+          await _writeTime(AppConstants.keyLastAutoBackupTimestamp, DateTime.now());
+        } catch (e) {
+          outcome.localError = 'Could not write to backup folder: $e';
+          debugPrint(outcome.localError);
+        }
+      }
+
+      if (outcome.signedIn) {
+        try {
+          await _googleDriveService.uploadBackup(
+            snapshot.path,
+            interactive: interactive,
+          );
+          outcome.uploaded = true;
+          await _writeTime(AppConstants.keyLastCloudUploadTimestamp, DateTime.now());
+          await _settingsDao.setValue(AppConstants.keyLastCloudUploadError, '');
+        } on DriveBackupException catch (e) {
+          outcome.cloudError = e.message;
+          await _settingsDao.setValue(AppConstants.keyLastCloudUploadError, e.message);
+          debugPrint('Google Drive upload failed: ${e.message}');
+        }
+      }
+    } finally {
+      await _deleteIfExists(snapshot.path);
+    }
+    return outcome;
+  }
+
+  @override
+  Future<Result<String>> backupDatabase(String? destinationDir) {
+    return _serialized(() async {
+      try {
+        final o = await _runBackup(folder: destinationDir, interactive: true);
+
+        if (o.localPath == null && !o.uploaded) {
+          return Result.failure(BackupFailure(
+            [o.localError, o.cloudError].whereType<String>().join('\n'),
+          ));
+        }
+
+        final lines = <String>[
+          if (o.localPath != null) '✅ Saved to ${o.localPath}',
+          if (o.localError != null) '❌ ${o.localError}',
+          if (o.uploaded) '✅ Uploaded to Google Drive',
+          if (o.cloudError != null) '❌ Google Drive: ${o.cloudError}',
+          if (!o.signedIn) 'ℹ️ Sign in to Google Drive to also back up online.',
+        ];
+        return Result.success(lines.join('\n'));
+      } on BackupFailure catch (f) {
+        return Result.failure(f);
+      } catch (e) {
+        return Result.failure(BackupFailure('Backup failed: $e'));
+      }
+    });
+  }
+
+  @override
+  Future<bool> checkAndPerformAutoBackup() {
+    return _serialized(() async {
+      try {
+        final folder = await getAutoBackupFolderPath();
+        final hasFolder = folder != null && folder.isNotEmpty;
+        final signedIn = await _googleDriveService.isSignedIn;
+        if (!hasFolder && !signedIn) return true; // nothing configured
+
+        final now = DateTime.now();
+        bool isDue(DateTime? last) =>
+            last == null ||
+            last.isAfter(now) || // clock was changed
+            now.difference(last) >= AppConstants.autoBackupInterval;
+
+        final localDue = hasFolder &&
+            isDue(await _readTime(AppConstants.keyLastAutoBackupTimestamp));
+        // A failed upload never advances this time, so it is retried on the
+        // next app start / background run instead of waiting a whole day.
+        final cloudDue = signedIn &&
+            isDue(await _readTime(AppConstants.keyLastCloudUploadTimestamp));
+
+        if (!localDue && !cloudDue) return true;
+
+        final o = await _runBackup(folder: folder, interactive: false);
+        final ok = (!hasFolder || o.localPath != null) &&
+            (!signedIn || o.uploaded);
+        debugPrint('Auto backup: local=${o.localPath ?? o.localError}, '
+            'cloud=${o.uploaded ? 'uploaded' : o.cloudError ?? 'skipped'}');
+        return ok;
+      } catch (e) {
+        debugPrint('Automatic backup failed: $e');
+        return false;
+      }
+    });
+  }
+
+  @override
+  Future<BackupStatus> getBackupStatus() async {
+    final folder = await getAutoBackupFolderPath();
+    final error = await _settingsDao.getValue(AppConstants.keyLastCloudUploadError);
+    return BackupStatus(
+      signedIn: await _googleDriveService.isSignedIn,
+      localFolderSet: folder != null && folder.isNotEmpty,
+      lastLocalBackup: await _readTime(AppConstants.keyLastAutoBackupTimestamp),
+      lastCloudUpload: await _readTime(AppConstants.keyLastCloudUploadTimestamp),
+      lastCloudError: (error == null || error.isEmpty) ? null : error,
+    );
+  }
+
+  // ===== RESTORE =====
+
+  @override
+  Future<Result<void>> restoreDatabase(String sourceFilePath) {
+    return _serialized(() => _restore(sourceFilePath));
+  }
+
+  Future<Result<void>> _restore(String sourceFilePath) async {
+    try {
+      final source = File(sourceFilePath);
+      if (!await source.exists()) {
         return Result.failure(const FileNotFoundFailure('Backup file not found'));
       }
-
-      // Find the active database path
-      final dbPath = await _getDatabasePath();
-      if (dbPath == null) {
-        return Result.failure(const BackupFailure('Could not resolve active database path'));
+      if (!await _isSqliteFile(source)) {
+        return Result.failure(const BackupFailure(
+          'This file is not a valid backup. Choose a ".db" backup file.',
+        ));
       }
 
-      print('--- DATABASE RESTORE DIAGNOSTICS ---');
-      print('Source path: $sourceFilePath');
-      print('Source file size: ${await sourceFile.length()} bytes');
-      print('Target active path: $dbPath');
+      final dbPath = await _liveDatabasePath();
 
-      // Close current database connection to release native file locks
+      // Keep a copy of the current data so a wrong restore can be undone.
+      try {
+        final docs = await getApplicationDocumentsDirectory();
+        await _snapshotTo(p.join(docs.path, 'before_restore.db'));
+      } catch (e) {
+        debugPrint('Could not save pre-restore copy: $e');
+      }
+
+      // Stage the new file next to the live one first; if this copy fails the
+      // current database is untouched.
+      final staged = '$dbPath.restore';
+      await source.copy(staged);
+
+      // Older backups may have a -wal written together with the .db; it holds
+      // recent changes. Only trust it if it is not older than the .db (a
+      // leftover from an earlier backup would be).
+      final sourceWal = File('$sourceFilePath-wal');
+      final useWal = await sourceWal.exists() &&
+          !(await sourceWal.lastModified()).isBefore(
+            (await source.lastModified()).subtract(const Duration(seconds: 5)),
+          );
+
+      // Release the native file handle before replacing the file.
       await _database.close();
 
-      // IMPORTANT: Actively delete existing WAL and SHM files to prevent SQLite
-      // from rolling back or corrupting the newly restored database.
-      final activeWal = File('$dbPath-wal');
-      final activeShm = File('$dbPath-shm');
-      if (await activeWal.exists()) await activeWal.delete();
-      if (await activeShm.exists()) await activeShm.delete();
-
-      // Copy source file to active database file directly
-      await sourceFile.copy(dbPath);
-
-      // Copy WAL and SHM files of the backup if they exist (though usually they don't in regular backups)
-      final sourceWal = File('$sourceFilePath-wal');
-      final sourceShm = File('$sourceFilePath-shm');
-      if (await sourceWal.exists()) {
-        await sourceWal.copy('$dbPath-wal');
+      for (final suffix in const ['-wal', '-shm', '-journal']) {
+        await _deleteIfExists('$dbPath$suffix');
       }
-      if (await sourceShm.exists()) {
-        await sourceShm.copy('$dbPath-shm');
-      }
-
-      print('Database files overwritten successfully!');
-      print('--- END RESTORE DIAGNOSTICS ---');
+      await File(staged).rename(dbPath);
+      if (useWal) await sourceWal.copy('$dbPath-wal');
 
       return Result.success(null);
     } catch (e) {
       return Result.failure(BackupFailure('Restore failed: $e'));
     }
   }
+
+  @override
+  Future<Result<CloudBackupInfo?>> getCloudBackupInfo() async {
+    try {
+      final info = await _googleDriveService.getBackupInfo(
+        AppConstants.backupFileName,
+      );
+      return Result.success(info == null
+          ? null
+          : CloudBackupInfo(
+              modifiedTime: info.modifiedTime,
+              sizeBytes: info.sizeBytes,
+            ));
+    } on DriveBackupException catch (e) {
+      return Result.failure(BackupFailure(e.message));
+    } catch (e) {
+      return Result.failure(BackupFailure('Could not check Google Drive: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> restoreFromCloud() {
+    return _serialized(() async {
+      String? downloaded;
+      try {
+        final tmp = await getTemporaryDirectory();
+        downloaded = p.join(tmp.path, 'drive_restore', AppConstants.backupFileName);
+        await Directory(p.dirname(downloaded)).create(recursive: true);
+
+        final info = await _googleDriveService.downloadBackup(
+          AppConstants.backupFileName,
+          downloaded,
+        );
+        if (info == null) {
+          return Result.failure(
+            const BackupFailure('No backup found on Google Drive.'),
+          );
+        }
+        return await _restore(downloaded);
+      } on DriveBackupException catch (e) {
+        return Result.failure(BackupFailure(e.message));
+      } catch (e) {
+        return Result.failure(BackupFailure('Restore from Drive failed: $e'));
+      } finally {
+        if (downloaded != null) await _deleteIfExists(downloaded);
+      }
+    });
+  }
+
+  // ===== SETTINGS =====
 
   @override
   Future<String?> getAutoBackupFolderPath() {
@@ -267,71 +457,6 @@ class SettingsRepositoryImpl implements SettingsRepository {
   }
 
   @override
-  Future<void> checkAndPerformAutoBackup() async {
-    try {
-      final folderPath = await getAutoBackupFolderPath();
-      if (folderPath == null || folderPath.isEmpty) return;
-
-      final lastBackupStr = await _settingsDao.getValue(AppConstants.keyLastAutoBackupTimestamp) ?? '0';
-      final lastBackupMs = int.tryParse(lastBackupStr) ?? 0;
-      final now = DateTime.now();
-
-      // Check if 24 hours have passed since last backup
-      final lastBackupTime = DateTime.fromMillisecondsSinceEpoch(lastBackupMs);
-      if (now.difference(lastBackupTime).inHours >= 24) {
-        final dbPath = await _getDatabasePath();
-        if (dbPath == null) return;
-
-        final dbFile = File(dbPath);
-        if (!await dbFile.exists()) return;
-
-        // Auto backup target folder and file
-        final backupFolder = Directory(folderPath);
-        if (!await backupFolder.exists()) {
-          await backupFolder.create(recursive: true);
-        }
-
-        // Auto backup uses a fixed filename so it overwrites the old one
-        final backupPath = p.join(folderPath, 'sagar_refrig_auto_backup.db');
-        
-        // Copy database file
-        await dbFile.copy(backupPath);
-        
-        // Also copy WAL and SHM files if they exist to keep the backup fully integral
-        final walFile = File('$dbPath-wal');
-        final shmFile = File('$dbPath-shm');
-        if (await walFile.exists()) {
-          await walFile.copy('$backupPath-wal');
-        }
-        if (await shmFile.exists()) {
-          await shmFile.copy('$backupPath-shm');
-        }
-
-        // Update last backup timestamp
-        await _settingsDao.setValue(
-          AppConstants.keyLastAutoBackupTimestamp,
-          now.millisecondsSinceEpoch.toString(),
-        );
-
-        // Upload to Google Drive
-        try {
-          if (await _googleDriveService.isSignedIn) {
-            print('Starting background auto-upload to Google Drive...');
-            await _googleDriveService.uploadBackup(backupPath);
-            print('Google Drive background upload successful.');
-          }
-        } catch (uploadError) {
-          print('Google Drive background upload failed: $uploadError');
-        }
-
-        print('AUTOMATIC DAILY BACKUP COMPLETED SUCCESSFUL!');
-      }
-    } catch (e) {
-      print('Automatic daily backup failed: $e');
-    }
-  }
-
-  @override
   Future<bool> signInToCloud() async {
     final account = await _googleDriveService.signIn();
     return account != null;
@@ -340,6 +465,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
   @override
   Future<void> signOutFromCloud() async {
     await _googleDriveService.signOut();
+    await _settingsDao.setValue(AppConstants.keyLastCloudUploadError, '');
   }
 
   @override

@@ -6,7 +6,7 @@ class BackupDatabaseUseCase {
 
   final SettingsRepository _repository;
 
-  Future<Result<String>> call(String destinationDir) {
+  Future<Result<String>> call(String? destinationDir) {
     return _repository.backupDatabase(destinationDir);
   }
 }

@@ -63,7 +63,7 @@ class HistoryCard extends StatelessWidget {
                         Text(
                           _getDisplayDate(complaint),
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                           ),
                         ),
                         if (complaint.status == ComplaintStatus.completed &&

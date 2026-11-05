@@ -189,7 +189,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: theme.colorScheme.shadow.withOpacity(0.1),
+              color: theme.colorScheme.shadow.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -200,7 +200,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: theme.colorScheme.onPrimaryContainer.withOpacity(0.1),
+                color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -218,7 +218,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   Text(
                     state.filter.hasActiveFilter ? 'Filtered Earnings' : 'Total Earnings',
                     style: theme.textTheme.labelMedium?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer.withOpacity(0.8),
+                      color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
                     ),

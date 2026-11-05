@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/string_constants.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/extensions/date_extensions.dart';
-import '../../../../core/widgets/audio_player_bottom_sheet.dart';
 import '../../../../core/widgets/error_state_widget.dart';
 import '../../../../core/widgets/loading_widget.dart';
 import '../../../../core/widgets/status_badge.dart';

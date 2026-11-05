@@ -1,8 +1,5 @@
-import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import '../constants/app_constants.dart';
 import 'daos/complaints_dao.dart';
 import 'daos/recordings_dao.dart';
@@ -77,36 +74,17 @@ class AppDatabase extends _$AppDatabase {
   static QueryExecutor _openConnection() {
     return driftDatabase(
       name: AppConstants.databaseName,
+      native: DriftNativeOptions(
+        // The background backup job opens its own connection in a separate
+        // Flutter engine; wait for locks instead of failing with
+        // "database is locked".
+        setup: (db) => db.execute('PRAGMA busy_timeout = 5000;'),
+      ),
       web: DriftWebOptions(
         sqlite3Wasm: Uri.parse('sqlite3.wasm'),
         driftWorker: Uri.parse('drift_worker.js'),
       ),
     );
-  }
-
-  static Future<void> _migrateOldDatabaseFile() async {
-    try {
-      final oldPath = '${(await getApplicationDocumentsDirectory()).path}/${AppConstants.databaseName}.sqlite';
-      final newPath = '${(await getApplicationSupportDirectory()).path}/${AppConstants.databaseName}';
-      
-      final oldFile = File(oldPath);
-      final newFile = File(newPath);
-      
-      if (await oldFile.exists() && !await newFile.exists()) {
-        // Copy database file
-        await oldFile.copy(newPath);
-        
-        // Also copy WAL and SHM files if they exist
-        final oldWal = File('$oldPath-wal');
-        final oldShm = File('$oldPath-shm');
-        if (await oldWal.exists()) {
-          await oldWal.copy('$newPath-wal');
-        }
-        if (await oldShm.exists()) {
-          await oldShm.copy('$newPath-shm');
-        }
-      }
-    } catch (_) {}
   }
 
   // Simpler constructor for production use
@@ -163,7 +141,4 @@ class AppDatabase extends _$AppDatabase {
           }
         },
       );
-
-  /// Get the database file path for backup/restore
-  static String get databasePath => AppConstants.databaseName;
 }

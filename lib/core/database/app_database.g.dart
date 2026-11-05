@@ -1970,42 +1970,40 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ];
 }
 
-typedef $$ComplaintsTableCreateCompanionBuilder =
-    ComplaintsCompanion Function({
-      Value<int> id,
-      required String customerName,
-      required String phoneNumber,
-      required String applianceType,
-      Value<String?> notes,
-      Value<String?> recordingPath,
-      Value<String> status,
-      Value<double?> amountEarned,
-      Value<double?> amountCollected,
-      Value<double?> amountPending,
-      Value<String?> completionNotes,
-      Value<String?> imagePath,
-      required int createdAt,
-      Value<int?> completedAt,
-      Value<int?> rejectedAt,
-    });
-typedef $$ComplaintsTableUpdateCompanionBuilder =
-    ComplaintsCompanion Function({
-      Value<int> id,
-      Value<String> customerName,
-      Value<String> phoneNumber,
-      Value<String> applianceType,
-      Value<String?> notes,
-      Value<String?> recordingPath,
-      Value<String> status,
-      Value<double?> amountEarned,
-      Value<double?> amountCollected,
-      Value<double?> amountPending,
-      Value<String?> completionNotes,
-      Value<String?> imagePath,
-      Value<int> createdAt,
-      Value<int?> completedAt,
-      Value<int?> rejectedAt,
-    });
+typedef $$ComplaintsTableCreateCompanionBuilder = ComplaintsCompanion Function({
+  Value<int> id,
+  required String customerName,
+  required String phoneNumber,
+  required String applianceType,
+  Value<String?> notes,
+  Value<String?> recordingPath,
+  Value<String> status,
+  Value<double?> amountEarned,
+  Value<double?> amountCollected,
+  Value<double?> amountPending,
+  Value<String?> completionNotes,
+  Value<String?> imagePath,
+  required int createdAt,
+  Value<int?> completedAt,
+  Value<int?> rejectedAt,
+});
+typedef $$ComplaintsTableUpdateCompanionBuilder = ComplaintsCompanion Function({
+  Value<int> id,
+  Value<String> customerName,
+  Value<String> phoneNumber,
+  Value<String> applianceType,
+  Value<String?> notes,
+  Value<String?> recordingPath,
+  Value<String> status,
+  Value<double?> amountEarned,
+  Value<double?> amountCollected,
+  Value<double?> amountPending,
+  Value<String?> completionNotes,
+  Value<String?> imagePath,
+  Value<int> createdAt,
+  Value<int?> completedAt,
+  Value<int?> rejectedAt,
+});
 
 final class $$ComplaintsTableReferences
     extends BaseReferences<_$AppDatabase, $ComplaintsTable, Complaint> {
@@ -2429,7 +2427,7 @@ class $$ComplaintsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ComplaintsTable, Complaint>(table),
                   $$ComplaintsTableReferences(db, table, e),
                 ),
               )
@@ -2444,10 +2442,11 @@ class $$ComplaintsTableTableManager
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (processedRecordingsRefs)
-                    await $_getPrefetchedData<
+                    await $_getPrefetchedDataByColumns<
                       Complaint,
                       $ComplaintsTable,
-                      ProcessedRecording
+                      ProcessedRecording,
+                      $ProcessedRecordingsTable
                     >(
                       currentTable: table,
                       referencedTable: $$ComplaintsTableReferences
@@ -2458,10 +2457,8 @@ class $$ComplaintsTableTableManager
                             table,
                             p0,
                           ).processedRecordingsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where(
-                            (e) => e.complaintId == item.id,
-                          ),
+                      currentColumn: 'id',
+                      referencedColumn: 'complaint_id',
                       typedResults: items,
                     ),
                 ];
@@ -2773,7 +2770,9 @@ class $$ProcessedRecordingsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ProcessedRecordingsTable, ProcessedRecording>(
+                    table,
+                  ),
                   $$ProcessedRecordingsTableReferences(db, table, e),
                 ),
               )
@@ -2799,19 +2798,15 @@ class $$ProcessedRecordingsTableTableManager
                     >
                   >(state) {
                     if (complaintId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.complaintId,
-                                referencedTable:
-                                    $$ProcessedRecordingsTableReferences
-                                        ._complaintIdTable(db),
-                                referencedColumn:
-                                    $$ProcessedRecordingsTableReferences
-                                        ._complaintIdTable(db)
-                                        .id,
-                              )
-                              as T;
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.complaintId,
+                        referencedTable: $$ProcessedRecordingsTableReferences
+                            ._complaintIdTable(db),
+                        referencedColumn: $$ProcessedRecordingsTableReferences
+                            ._complaintIdTable(db)
+                            .id,
+                      ) as T;
                     }
 
                     return state;
@@ -3027,7 +3022,18 @@ class $$DiscardedRecordingsTableTableManager
                 discardedAt: discardedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DiscardedRecordingsTable, DiscardedRecording>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $DiscardedRecordingsTable,
+                    DiscardedRecording
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -3193,7 +3199,16 @@ class $$AppSettingsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AppSettingsTable, AppSetting>(table),
+                  BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),

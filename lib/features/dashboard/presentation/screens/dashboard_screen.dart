@@ -371,7 +371,7 @@ class _PendingCollectionCard extends ConsumerWidget {
             Text(
               'Completed: ${complaint.completedAt?.toDisplayDateTime() ?? complaint.createdAt.toDisplayDateTime()}',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
             const Divider(height: 16),

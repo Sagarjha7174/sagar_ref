@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/background/background_backup.dart';
 import 'core/di/injection.dart';
 import 'app/app.dart';
 import 'features/settings/data/repositories/settings_repository_impl.dart';
@@ -29,7 +30,17 @@ void main() async {
 
   await configureDependencies();
 
-  // Trigger automatic backup check asynchronously on app startup
+  runApp(
+    const ProviderScope(
+      child: App(),
+    ),
+  );
+
+  // Daily backup check in the background job (Android) ...
+  scheduleBackgroundBackup();
+
+  // ... and once on every start, which also retries a failed Drive upload.
+  // Never shows UI; runs after the first frame so startup isn't slowed.
   SettingsRepositoryImpl(
     settingsDao: getIt<SettingsDao>(),
     complaintsDao: getIt<ComplaintsDao>(),
@@ -37,11 +48,6 @@ void main() async {
     googleDriveService: getIt<GoogleDriveService>(),
   ).checkAndPerformAutoBackup().catchError((e) {
     debugPrint('Error performing automatic backup during startup: $e');
+    return false;
   });
-
-  runApp(
-    const ProviderScope(
-      child: App(),
-    ),
-  );
 }

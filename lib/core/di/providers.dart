@@ -245,3 +245,9 @@ final cloudAuthStatusProvider = FutureProvider.autoDispose<bool>((ref) async {
   final repo = ref.watch(settingsRepositoryProvider);
   return await repo.isCloudSignedIn();
 });
+
+// Local + Google Drive backup status shown in Settings
+final backupStatusProvider = FutureProvider.autoDispose<BackupStatus>((ref) async {
+  final repo = ref.watch(settingsRepositoryProvider);
+  return repo.getBackupStatus();
+});

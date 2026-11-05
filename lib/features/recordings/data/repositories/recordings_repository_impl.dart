@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/daos/recordings_dao.dart';
@@ -83,17 +84,24 @@ class RecordingsRepositoryImpl implements RecordingsRepository {
         return Result.success([]);
       }
 
-      // Get cached data
-      final cachedRecordings = _cacheService.isCacheValid(folderPath)
+      // Get cached data, dropping recordings whose file was deleted
+      final cachedAll = _cacheService.isCacheValid(folderPath)
           ? _cacheService.getCachedRecordings()
           : <RecordingItem>[];
+      final cachedRecordings =
+          cachedAll.where((r) => File(r.filePath).existsSync()).toList();
       final lastScan = _cacheService.getLastScanTimestamp();
 
-      // Incremental scan: only new files since last scan
-      final parsedRecordings = await _scannerService.scanFolder(
+      // Incremental scan with a 1-day look-back: a recording can appear
+      // before its call-log entry is written, so files that could not be
+      // matched on an earlier scan get another chance.
+      final existingPaths = cachedRecordings.map((r) => r.filePath).toSet();
+      final parsedRecordings = (await _scannerService.scanFolder(
         folderPath,
-        since: lastScan,
-      );
+        since: lastScan?.subtract(const Duration(days: 1)),
+      ))
+          .where((r) => !existingPaths.contains(r.filePath))
+          .toList();
 
       if (parsedRecordings.isEmpty) {
         // No new files — return cached as-is, but update cache timestamp
@@ -104,13 +112,7 @@ class RecordingsRepositoryImpl implements RecordingsRepository {
       // Process only the new recordings
       final newItems = await _processRecordings(parsedRecordings);
 
-      // Merge: new recordings first, then cached (deduplicated by filePath)
-      final existingPaths = cachedRecordings.map((r) => r.filePath).toSet();
-      final uniqueNew = newItems
-          .where((r) => !existingPaths.contains(r.filePath))
-          .toList();
-
-      final merged = [...uniqueNew, ...cachedRecordings];
+      final merged = [...newItems, ...cachedRecordings];
       // Sort by recorded date, newest first
       merged.sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
 
@@ -174,15 +176,21 @@ class RecordingsRepositoryImpl implements RecordingsRepository {
     final results = <RecordingItem>[];
     for (final matched in matchedRecordings) {
       if (!matched.isIncoming) continue;
-      var contactName = await _contactLookupService.lookupContact(
-        matched.parsed.phoneNumber,
-      );
+      var contactName = matched.phoneNumber.isNotEmpty
+          ? await _contactLookupService.lookupContact(matched.phoneNumber)
+          : 'Unknown';
       if (contactName == 'Unknown') {
-        contactName = matched.parsed.contactName;
+        // Fall back to the name in the filename, then the call log's name.
+        final callLogName = matched.callLogName?.trim() ?? '';
+        contactName = matched.parsed.contactName !=
+                    RecordingFilenameParser.unknownContact ||
+                callLogName.isEmpty
+            ? matched.parsed.contactName
+            : callLogName;
       }
       results.add(RecordingItem(
         filePath: matched.parsed.filePath,
-        phoneNumber: matched.parsed.phoneNumber,
+        phoneNumber: matched.phoneNumber,
         contactName: contactName,
         recordedAt: matched.parsed.recordedAt,
         durationSeconds: matched.durationSeconds,

@@ -25,6 +25,11 @@ class ComplaintsRepositoryImpl implements ComplaintsRepository {
     try {
       // Check duplicate pending
       final normalized = PhoneNumberUtils.normalize(phoneNumber);
+      if (normalized.replaceAll(RegExp(r'\D'), '').length < 7) {
+        return Result.failure(const DatabaseFailure(
+          'Phone number is missing or invalid.',
+        ));
+      }
       final existing = await _complaintsDao.findPendingByPhone(normalized);
       if (existing != null) {
         return Result.failure(const DuplicateComplaintFailure());

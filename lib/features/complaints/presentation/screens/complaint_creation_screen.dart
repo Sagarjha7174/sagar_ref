@@ -107,9 +107,11 @@ class _ComplaintCreationScreenState
           _nameController.text = result.recognizedWords;
         }
       },
-      listenFor: const Duration(seconds: 15),
-      pauseFor: const Duration(seconds: 4),
-      partialResults: true,
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        listenFor: const Duration(seconds: 15),
+        pauseFor: const Duration(seconds: 4),
+      ),
     );
 
     // Show listening bottom sheet with live preview
@@ -425,14 +427,14 @@ class _PulsingMicIconState extends State<_PulsingMicIcon>
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: theme.colorScheme.primary.withOpacity(0.1),
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
           ),
           child: Container(
             width: _animation.value,
             height: _animation.value,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: theme.colorScheme.primary.withOpacity(0.2),
+              color: theme.colorScheme.primary.withValues(alpha: 0.2),
             ),
             child: Icon(
               Icons.mic,

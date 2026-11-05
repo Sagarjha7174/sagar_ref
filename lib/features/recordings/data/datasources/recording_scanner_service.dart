@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:logger/logger.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/database/daos/recordings_dao.dart';
 import 'recording_filename_parser.dart';
 
@@ -45,7 +46,8 @@ class RecordingScannerService {
 
       for (final entity in entities) {
         if (entity is! File) continue;
-        if (!entity.path.toLowerCase().endsWith('.mp3')) continue;
+        final lowerPath = entity.path.toLowerCase();
+        if (!AppConstants.recordingExtensions.any(lowerPath.endsWith)) continue;
 
         // Skip already processed or discarded
         if (knownPaths.contains(entity.path)) {

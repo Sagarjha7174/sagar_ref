@@ -59,7 +59,9 @@ Future<void> configureDependencies() async {
     ),
   );
   getIt.registerLazySingleton<CallLogMatcher>(
-    () => CallLogMatcher(),
+    () => CallLogMatcher(
+      contactLookupService: getIt<ContactLookupService>(),
+    ),
   );
   getIt.registerLazySingleton<ContactLookupService>(
     () => ContactLookupService(),

@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/recording_item.dart';
 import '../../../../core/di/providers.dart';
-import '../../../../core/errors/failures.dart';
 
 class RecordingsState {
   const RecordingsState({
@@ -79,10 +78,9 @@ class RecordingsNotifier extends Notifier<RecordingsState> {
 
     // --- Phase 2: Incremental scan for new recordings ---
     final scanResult = await repo.scanNewRecordings();
+    final isNotConfigured = await _isFolderNotConfigured();
     scanResult.when(
       success: (recordings) {
-        final folderSetting = ref.read(recordingFolderSettingProvider).value;
-        final isNotConfigured = folderSetting == null || folderSetting.isEmpty;
 
         state = RecordingsState(
           recordings: recordings,
@@ -111,11 +109,10 @@ class RecordingsNotifier extends Notifier<RecordingsState> {
 
     final useCase = ref.read(scanRecordingsUseCaseProvider);
     final result = await useCase.call();
+    final isNotConfigured = await _isFolderNotConfigured();
 
     result.when(
       success: (recordings) {
-        final folderSetting = ref.read(recordingFolderSettingProvider).value;
-        final isNotConfigured = folderSetting == null || folderSetting.isEmpty;
 
         state = RecordingsState(
           recordings: recordings,
@@ -123,13 +120,15 @@ class RecordingsNotifier extends Notifier<RecordingsState> {
         );
       },
       failure: (failure) {
-        if (failure is PermissionDeniedFailure) {
-          state = RecordingsState(error: failure.message);
-        } else {
-          state = RecordingsState(error: failure.message);
-        }
+        state = RecordingsState(error: failure.message);
       },
     );
+  }
+
+  Future<bool> _isFolderNotConfigured() async {
+    final folder =
+        await ref.read(settingsRepositoryProvider).getRecordingFolderPath();
+    return folder == null || folder.isEmpty;
   }
 
   Future<void> discardRecording(RecordingItem recording) async {

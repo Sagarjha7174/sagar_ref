@@ -37,7 +37,8 @@ class ComplaintsDao extends DatabaseAccessor<AppDatabase>
     return (select(complaints)
           ..where((t) =>
               t.phoneNumber.equals(phoneNumber) &
-              t.status.equals('Pending')))
+              t.status.equals('Pending'))
+          ..limit(1))
         .getSingleOrNull();
   }
 
@@ -130,7 +131,10 @@ class ComplaintsDao extends DatabaseAccessor<AppDatabase>
         rejectedAt: Value(DateTime.now().millisecondsSinceEpoch),
         completedAt: const Value(null),
         amountEarned: const Value(null),
+        amountCollected: const Value(null),
+        amountPending: const Value(null),
         completionNotes: const Value(null),
+        imagePath: const Value(null),
       ),
     ).then((rows) => rows > 0);
   }
@@ -142,7 +146,10 @@ class ComplaintsDao extends DatabaseAccessor<AppDatabase>
         completedAt: Value(null),
         rejectedAt: Value(null),
         amountEarned: Value(null),
+        amountCollected: Value(null),
+        amountPending: Value(null),
         completionNotes: Value(null),
+        imagePath: Value(null),
       ),
     ).then((rows) => rows > 0);
   }
